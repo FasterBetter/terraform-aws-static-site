@@ -1,8 +1,44 @@
 # tfsec:ignore:aws-s3-enable-bucket-encryption
 resource "aws_s3_bucket" "static-site" {
   bucket = var.domain-name
-  acl    = "public-read" #tfsec:ignore:aws-s3-no-public-access-with-acl
 
+  # N.B. We explicitly DO NOT use KMS encryption for objects in _static site_ S3
+  # buckets because doing so can render Cloudfront unable to read them!
+  #
+  # Static sites should be reserved for serving non-sensitive content!
+
+  # logging {
+  #   target_bucket = var.logging-bucket.id
+  #   target_prefix = join("/", [var.name, "s3"])
+  # }
+}
+
+resource "aws_s3_bucket_website_configuration" "static-site" {
+  bucket = aws_s3_bucket.static-site.id
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "error.html"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "static-site" {
+  bucket = aws_s3_bucket.static-site.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_acl" "static-site" {
+  bucket = aws_s3_bucket.static-site.id
+  acl    = "public-read" #tfsec:ignore:aws-s3-no-public-access-with-acl
+}
+
+resource "aws_s3_bucket_policy" "static-site" {
+  bucket = aws_s3_bucket.static-site.id
   policy = jsonencode({
     Version = "2008-10-17",
     Statement = [
@@ -15,25 +51,6 @@ resource "aws_s3_bucket" "static-site" {
       }
     ]
   })
-
-  # N.B. We explicitly DO NOT use KMS encryption for objects in _static site_ S3
-  # buckets because doing so can render Cloudfront unable to read them!
-  #
-  # Static sites should be reserved for serving non-sensitive content!
-
-  versioning {
-    enabled = true
-  }
-
-  website {
-    index_document = "index.html"
-    error_document = "error.html"
-  }
-
-  # logging {
-  #   target_bucket = var.logging-bucket.id
-  #   target_prefix = join("/", [var.name, "s3"])
-  # }
 }
 
 resource "aws_s3_bucket_public_access_block" "static-site" {
